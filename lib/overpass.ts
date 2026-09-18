@@ -1,4 +1,45 @@
-import { env } from '@/config/env';
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+] as const;
+
+const OVERPASS_HEADERS = {
+  Accept: 'application/json',
+  'Content-Type': 'application/x-www-form-urlencoded',
+  Referer: 'https://github.com/rahulkrvermaa/indian-railway',
+  'User-Agent': 'RailGaadi/0.1.0 (https://github.com/rahulkrvermaa/indian-railway)',
+};
+
+async function fetchOverpassJson(query: string): Promise<any> {
+  let lastError: unknown;
+
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: OVERPASS_HEADERS,
+        body: new URLSearchParams({ data: query }).toString(),
+        signal: controller.signal,
+      });
+
+      if (res.ok) {
+        return await res.json();
+      }
+
+      const detail = (await res.text()).trim().slice(0, 200);
+      lastError = new Error(`Overpass API error: ${res.status}${detail ? ` - ${detail}` : ''}`);
+    } catch (error) {
+      lastError = error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Overpass API request failed');
+}
 
 export interface TerrainFeature {
   type: 'bridge' | 'tunnel' | 'river' | 'mountain' | 'tourist' | 'city';
@@ -62,19 +103,7 @@ export async function getTerrainFeatures(
 
   try {
     const query = buildOverpassQuery(minLat, minLng, maxLat, maxLng);
-    const res = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'RailGaadi/0.1.0',
-      },
-      body: `data=${encodeURIComponent(query)}`,
-    });
-
-    if (!res.ok) throw new Error(`Overpass API error: ${res.status}`);
-
-    const json = await res.json();
+    const json = await fetchOverpassJson(query);
     const elements: any[] = json?.elements || [];
 
     // De-duplicate by name + type and limit to 30 POIs
@@ -98,14 +127,7 @@ export async function getTerrainFeatures(
     }
 
     return features;
-  } catch (e) {
-    console.warn('Overpass terrain fetch failed:', e);
-
-    // Return a few synthetic POIs if Overpass is unavailable
-    return [
-      { type: 'river', name: 'Tapti River', lat: 21.15, lng: 72.72, distanceKm: 265 },
-      { type: 'bridge', name: 'Kota Railway Bridge', lat: 25.18, lng: 75.85, distanceKm: 918 },
-      { type: 'mountain', name: 'Aravalli Hills', lat: 24.6, lng: 73.9, distanceKm: 750 },
-    ];
+  } catch {
+    return [];
   }
 }
