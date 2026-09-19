@@ -97,10 +97,15 @@ interface RRLiveResponse {
   trackingMode: string;
   currentLocation?: {
     stationCode: string;
+    stationName?: string;
     sequence: number;
     status: string;
     isHalt: boolean;
-    isActualPosition: boolean;
+    isActualPosition?: boolean;
+    distanceFromOriginKm?: number;
+    distanceFromLastStationKm?: number;
+    segmentProgress?: number;
+    delayMinutes?: number;
     lat?: number;
     lng?: number;
   };
@@ -239,8 +244,7 @@ function normaliseLiveResponse(raw: RRLiveResponse, routeGeo?: [number, number][
   if (train.destination) stationMap.set(train.destination.code, train.destination);
 
   const allStops = raw.route.filter((s) => s.isHalt || s.stationCode || s.station?.code);
-  const haltStops = raw.route.filter((s) => s.isHalt);
-  const relevantStops = haltStops.length > 0 ? haltStops : allStops;
+  const relevantStops = allStops;
   const totalDistanceKm = train.distance || Math.round(relevantStops[relevantStops.length - 1]?.distance || 0);
 
   const stations = relevantStops.map((s) => {
@@ -254,29 +258,37 @@ function normaliseLiveResponse(raw: RRLiveResponse, routeGeo?: [number, number][
     return st;
   });
 
-  const currentStation = stations.find((s) => s.status === 'current');
+  let currentStation = stations.find((s) => s.status === 'current');
   const previousStation = [...stations].reverse().find((s) => s.status === 'passed');
   const nextStation = stations.find((s) => s.status === 'upcoming');
 
-  const coveredKm = currentStation?.distanceKm || previousStation?.distanceKm || 0;
+  const rawLoc = raw.currentLocation;
+
+  if (!currentStation && rawLoc?.stationCode) {
+    currentStation = stations.find((s) => s.code === rawLoc.stationCode);
+  }
+
+  const coveredKm = rawLoc?.distanceFromOriginKm ?? (currentStation?.distanceKm || previousStation?.distanceKm || 0);
   const remainingKm = Math.max(0, totalDistanceKm - coveredKm);
   const completion = totalDistanceKm > 0 ? Math.min(100, (coveredKm / totalDistanceKm) * 100) : 0;
 
-  let trainLat = raw.currentLocation?.lat;
-  let trainLng = raw.currentLocation?.lng;
+  let trainLat = rawLoc?.lat;
+  let trainLng = rawLoc?.lng;
 
   if (!trainLat || !trainLng) {
-    const posStation = currentStation || previousStation;
-    if (posStation && posStation.lat && posStation.lng) {
-      trainLat = posStation.lat;
-      trainLng = posStation.lng;
-    } else if (routeGeo && routeGeo.length >= 2) {
+    if (routeGeo && routeGeo.length >= 2) {
       const [lng, lat] = interpolatePolyline(routeGeo, completion);
       trainLng = lng;
       trainLat = lat;
     } else {
-      trainLat = train.source.lat;
-      trainLng = train.source.lng;
+      const posStation = currentStation || previousStation;
+      if (posStation && posStation.lat && posStation.lng) {
+        trainLat = posStation.lat;
+        trainLng = posStation.lng;
+      } else {
+        trainLat = train.source.lat;
+        trainLng = train.source.lng;
+      }
     }
   }
 

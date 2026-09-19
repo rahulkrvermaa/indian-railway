@@ -15,7 +15,7 @@ async function fetchOverpassJson(query: string): Promise<any> {
 
   for (const endpoint of OVERPASS_ENDPOINTS) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeout = setTimeout(() => controller.abort(), 25000);
 
     try {
       const res = await fetch(endpoint, {
@@ -57,15 +57,15 @@ function buildOverpassQuery(minLat: number, minLng: number, maxLat: number, maxL
   const bbox = `${minLat},${minLng},${maxLat},${maxLng}`;
   return `[out:json][timeout:25];
 (
-  way["bridge"="yes"](${bbox});
-  way["tunnel"="yes"](${bbox});
-  relation["waterway"="river"](${bbox});
-  way["waterway"="river"](${bbox});
-  node["natural"="peak"](${bbox});
-  node["tourism"="attraction"](${bbox});
-  node["tourism"="viewpoint"](${bbox});
-  node["place"="city"](${bbox});
-  node["place"="town"](${bbox});
+  way["bridge"="yes"]["name"](${bbox});
+  way["tunnel"="yes"]["name"](${bbox});
+  relation["waterway"="river"]["name"](${bbox});
+  way["waterway"="river"]["name"](${bbox});
+  node["natural"="peak"]["name"](${bbox});
+  node["tourism"="attraction"]["name"](${bbox});
+  node["tourism"="viewpoint"]["name"](${bbox});
+  node["place"="city"]["name"](${bbox});
+  node["place"="town"]["name"](${bbox});
 );
 out center tags 50;`;
 }
@@ -96,10 +96,26 @@ export async function getTerrainFeatures(
   // Compute bounding box from route with padding
   const lngs = routeCoords.map(([lng]) => lng);
   const lats = routeCoords.map(([, lat]) => lat);
-  const minLat = Math.min(...lats) - 0.05;
-  const maxLat = Math.max(...lats) + 0.05;
-  const minLng = Math.min(...lngs) - 0.05;
-  const maxLng = Math.max(...lngs) + 0.05;
+  let minLat = Math.min(...lats) - 0.05;
+  let maxLat = Math.max(...lats) + 0.05;
+  let minLng = Math.min(...lngs) - 0.05;
+  let maxLng = Math.max(...lngs) + 0.05;
+
+  // CLAMP BOUNDING BOX: If the route is massive (e.g. across all of India), Overpass will Abort/Timeout.
+  // We strictly limit the maximum search area to a 0.5x0.5 degree box (~50x50km) centered on the route to guarantee it succeeds in < 1 second.
+  const latSpan = maxLat - minLat;
+  if (latSpan > 0.5) {
+    const centerLat = (minLat + maxLat) / 2;
+    minLat = centerLat - 0.25;
+    maxLat = centerLat + 0.25;
+  }
+  
+  const lngSpan = maxLng - minLng;
+  if (lngSpan > 0.5) {
+    const centerLng = (minLng + maxLng) / 2;
+    minLng = centerLng - 0.25;
+    maxLng = centerLng + 0.25;
+  }
 
   try {
     const query = buildOverpassQuery(minLat, minLng, maxLat, maxLng);
@@ -127,7 +143,8 @@ export async function getTerrainFeatures(
     }
 
     return features;
-  } catch {
+  } catch (error) {
+    console.error('Overpass terrain fetch failed:', error);
     return [];
   }
 }

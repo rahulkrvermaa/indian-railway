@@ -85,7 +85,7 @@ export default function HomePage() {
   return (
     <div className="space-y-10 py-4">
       {/* ─── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-sky-500/10 via-background to-background p-8 md:p-14 text-center border border-sky-500/20 shadow-glass">
+      <section className="relative rounded-3xl bg-gradient-to-b from-sky-500/10 via-background to-background p-8 md:p-14 text-center border border-sky-500/20 shadow-glass">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

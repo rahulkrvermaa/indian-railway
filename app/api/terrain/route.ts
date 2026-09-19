@@ -15,7 +15,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const cacheKey = `terrain:${trainId}`;
+  // Use a new cache key namespace to bypass any previously cached empty arrays []
+  const cacheKey = `terrain:v3:${trainId}`;
   const cached = getCached<TerrainFeature[]>(cacheKey);
   if (cached) {
     return NextResponse.json<ApiResponse<TerrainFeature[]>>({
@@ -56,7 +57,10 @@ export async function GET(request: NextRequest) {
     // Sort by distance
     features.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
 
-    setCached(cacheKey, features, 86400); // 24h
+    // Only cache if we actually got results. Do not cache empty arrays (errors/timeouts).
+    if (features.length > 0) {
+      setCached(cacheKey, features, 86400); // 24h
+    }
 
     return NextResponse.json<ApiResponse<TerrainFeature[]>>({
       success: true,

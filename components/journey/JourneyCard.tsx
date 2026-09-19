@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Gauge, MapPin, RefreshCw, ArrowRight } from 'lucide-react';
+import { Gauge, MapPin, RefreshCw, ArrowRight, Share2 } from 'lucide-react';
 import { LiveJourney } from '@/types/train';
 import { DelayBadge } from './DelayBadge';
 import { ProgressRing } from './ProgressRing';
@@ -22,14 +22,53 @@ export function JourneyCard({
   isRefreshing,
   className,
 }: JourneyCardProps) {
+  const isRunning = journey.status === 'running';
+
+  const handleShare = async () => {
+    const shareData = {
+      title: `${journey.name} (${journey.number}) - Live Status`,
+      text: `Track the live location of ${journey.name} from ${journey.origin.name} to ${journey.destination.name}!`,
+      url: window.location.href,
+    };
+    
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        alert('Journey link copied to clipboard!');
+      }
+    } catch (err) {
+      console.log('Error sharing:', err);
+    }
+  };
+
+  let statusGradient = 'before:from-rail-blue/10';
+  let gaugeColor = 'bg-rail-blue/10 text-rail-blue';
+  
+  if (isRunning) {
+    if (journey.delayMinutes > 60) {
+      statusGradient = 'before:from-rose-500/10';
+      gaugeColor = 'bg-rose-500/10 text-rose-500';
+    } else if (journey.delayMinutes > 15) {
+      statusGradient = 'before:from-amber-500/10';
+      gaugeColor = 'bg-amber-500/10 text-amber-600';
+    } else if (journey.delayMinutes <= 0) {
+      statusGradient = 'before:from-emerald-500/10';
+      gaugeColor = 'bg-emerald-500/10 text-emerald-600';
+    }
+  }
+
   return (
     <div
       className={cn(
         'glass-panel relative overflow-hidden rounded-3xl p-6 shadow-glass transition-all duration-300',
+        isRunning && `before:absolute before:inset-0 before:bg-gradient-to-br ${statusGradient} before:to-transparent before:animate-pulse`,
         className
       )}
     >
-      {/* Header Bar */}
+      <div className="relative z-10">
+        {/* Header Bar */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -50,6 +89,15 @@ export function JourneyCard({
 
         <div className="flex items-center gap-3">
           <ETAChip eta={journey.ETA} />
+          
+          <button
+            onClick={handleShare}
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100/80 text-slate-600 transition-colors hover:bg-slate-200 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:bg-slate-700"
+            title="Share Live Status"
+          >
+            <Share2 className="h-4 w-4" />
+          </button>
+
           {onRefresh && (
             <button
               onClick={onRefresh}
@@ -89,7 +137,7 @@ export function JourneyCard({
 
         {/* Speed & Motion */}
         <div className="flex items-center gap-3.5 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800/60 dark:bg-slate-900/50">
-          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-rail-blue/10 text-rail-blue">
+          <div className={cn("flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition-colors duration-500", gaugeColor)}>
             <Gauge className="h-5 w-5 animate-pulse" />
           </div>
           <div>
@@ -126,6 +174,7 @@ export function JourneyCard({
       <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
         <span>Auto-refreshes every 30 seconds</span>
         <span>Updated {formatTimeAgo(journey.lastUpdated)}</span>
+      </div>
       </div>
     </div>
   );

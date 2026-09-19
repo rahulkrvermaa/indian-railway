@@ -46,6 +46,82 @@ function getPolylinePoint(coords: [number, number][], pct: number): [number, num
   return coords[coords.length - 1];
 }
 
+// === WEATHER OVERLAY COMPONENT ===
+function MapWeatherOverlay({ lat, lng }: { lat?: number; lng?: number }) {
+  const [weatherType, setWeatherType] = useState<'rain' | 'snow' | 'clear' | null>(null);
+
+  useEffect(() => {
+    if (!lat || !lng) return;
+    const fetchWeather = async () => {
+      try {
+        const res = await fetch(`/api/weather?lat=${lat}&lng=${lng}`);
+        const json = await res.json();
+        if (json.success && json.data) {
+          const desc = json.data.description?.toLowerCase() || '';
+          if (desc.includes('rain') || desc.includes('drizzle') || desc.includes('shower')) setWeatherType('rain');
+          else if (desc.includes('snow')) setWeatherType('snow');
+          else setWeatherType('clear');
+        }
+      } catch (e) {
+        // fail silently for overlay
+      }
+    };
+    fetchWeather();
+  }, [lat, lng]);
+
+  if (!weatherType || weatherType === 'clear') return null;
+
+  return (
+    <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden opacity-60 mix-blend-screen">
+      {/* Dynamic CSS effects rendered conditionally */}
+      {weatherType === 'rain' && (
+        <div className="absolute inset-0 bg-slate-900/20">
+          {[...Array(20)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-[2px] h-[40px] bg-gradient-to-b from-transparent to-cyan-300"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `-${Math.random() * 50}%`,
+                opacity: 0.3 + Math.random() * 0.5,
+                animation: `fall ${0.5 + Math.random() * 0.3}s linear infinite`,
+                animationDelay: `${Math.random() * 2}s`
+              }}
+            />
+          ))}
+        </div>
+      )}
+      
+      {weatherType === 'snow' && (
+        <div className="absolute inset-0 bg-slate-800/20">
+          {[...Array(30)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute rounded-full bg-white blur-[1px]"
+              style={{
+                width: `${4 + Math.random() * 4}px`,
+                height: `${4 + Math.random() * 4}px`,
+                left: `${Math.random() * 100}%`,
+                top: `-${Math.random() * 50}%`,
+                opacity: 0.4 + Math.random() * 0.6,
+                animation: `fall ${2 + Math.random() * 3}s linear infinite`,
+                animationDelay: `${Math.random() * 3}s`
+              }}
+            />
+          ))}
+        </div>
+      )}
+      
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes fall {
+          0% { transform: translateY(-50px) translateX(0); }
+          100% { transform: translateY(100vh) translateX(30px); }
+        }
+      `}} />
+    </div>
+  );
+}
+
 export default function MapView({ journey, className }: MapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -60,20 +136,27 @@ export default function MapView({ journey, className }: MapViewProps) {
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    const styleUrl = MAPTILER_KEY
-      ? `https://api.maptiler.com/maps/dataviz-dark/style.json?key=${MAPTILER_KEY}`
-      : {
-          version: 8 as const,
-          sources: {
-            'carto-dark': {
-              type: 'raster' as const,
-              tiles: ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],
-              tileSize: 256,
-              attribution: '© OpenStreetMap © CARTO',
+    const isDarkMode = document.documentElement.classList.contains('dark');
+
+    const getStyleUrl = (isDark: boolean) => {
+      // User specifically requested satellite view
+      const maptilerStyle = 'hybrid';
+      
+      return MAPTILER_KEY
+        ? `https://api.maptiler.com/maps/${maptilerStyle}/style.json?key=${MAPTILER_KEY}`
+        : {
+            version: 8 as const,
+            sources: {
+              'satellite': {
+                type: 'raster' as const,
+                tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+                tileSize: 256,
+                attribution: 'Tiles © Esri',
+              },
             },
-          },
-          layers: [{ id: 'carto-layer', type: 'raster' as const, source: 'carto-dark' }],
-        };
+            layers: [{ id: 'satellite-layer', type: 'raster' as const, source: 'satellite' }],
+          };
+    };
 
     const center: [number, number] = [
       journey.currentLocation?.lng || journey.stations[0]?.lng || 77.22,
@@ -82,7 +165,7 @@ export default function MapView({ journey, className }: MapViewProps) {
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: styleUrl as any,
+      style: getStyleUrl(isDarkMode) as any,
       center,
       zoom: 7,
       pitch: 30,
@@ -98,7 +181,20 @@ export default function MapView({ journey, className }: MapViewProps) {
     // Disable follow mode when user drags the map
     map.on('dragstart', () => setFollowTrainMode(false));
 
+    // Watch for theme changes
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          const currentlyDark = document.documentElement.classList.contains('dark');
+          map.setStyle(getStyleUrl(currentlyDark) as any);
+        }
+      });
+    });
+    
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
     return () => {
+      observer.disconnect();
       map.remove();
       mapRef.current = null;
     };
@@ -192,9 +288,9 @@ export default function MapView({ journey, className }: MapViewProps) {
     stationMarkersRef.current.forEach((m) => m.remove());
     stationMarkersRef.current = [];
 
-    // Only show markers for junctions/stations where the train stops (haltMinutes > 0)
+    // Only show markers for junctions/stations where the train stops (haltMinutes > 0) or the current station
     journey.stations
-      .filter((s) => typeof s.haltMinutes === 'number' && s.haltMinutes > 0)
+      .filter((s) => (typeof s.haltMinutes === 'number' && s.haltMinutes > 0) || s.status === 'current')
       .forEach((st) => {
         if (!st.lat || !st.lng) return;
         const el = document.createElement('div');
@@ -241,6 +337,9 @@ export default function MapView({ journey, className }: MapViewProps) {
   return (
     <div className={cn('relative overflow-hidden rounded-3xl shadow-glass', className)}>
       <div ref={mapContainerRef} className="h-full w-full min-h-[420px]" />
+      
+      {/* Dynamic weather particles (e.g. rain/snow) based on live location */}
+      <MapWeatherOverlay lat={journey.currentLocation?.lat} lng={journey.currentLocation?.lng} />
 
       {/* Floating Controls */}
       <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">

@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Train, Search, Heart, Map } from 'lucide-react';
+import { Train, Search, Heart, Moon, Sun } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/utils/cn';
 import { useFavoritesStore } from '@/store/favorites';
@@ -10,6 +10,25 @@ import { useFavoritesStore } from '@/store/favorites';
 export function Navbar() {
   const pathname = usePathname();
   const { favorites } = useFavoritesStore();
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    // Check initial theme
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    setIsDark(isDarkMode);
+  }, []);
+
+  const toggleTheme = () => {
+    const nextDark = !isDark;
+    setIsDark(nextDark);
+    if (nextDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
 
   const links = [
     { href: '/', label: 'Search', icon: Search, exact: true },
@@ -34,7 +53,7 @@ export function Navbar() {
           </div>
         </Link>
 
-        {/* Navigation Links */}
+        {/* Navigation Links & Actions */}
         <nav className="flex items-center gap-1 sm:gap-2">
           {links.map(({ href, label, icon: Icon, exact }) => {
             const isActive = exact ? pathname === href : pathname.startsWith(href);
@@ -61,6 +80,16 @@ export function Navbar() {
               </Link>
             );
           })}
+          
+          <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1 sm:mx-2" />
+          
+          <button
+            onClick={toggleTheme}
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            title="Toggle theme"
+          >
+            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
         </nav>
       </div>
     </header>

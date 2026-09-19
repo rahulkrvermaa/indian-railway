@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { Mountain, Loader2, MapPin } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { TerrainFeature } from '@/lib/overpass';
 import { TerrainCard } from './TerrainCard';
 
@@ -36,6 +37,20 @@ export function TerrainPanel({ trainId }: TerrainPanelProps) {
     load();
   }, [trainId]);
 
+  // Framer motion variants for stagger
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.05 }
+    }
+  };
+
+  const item = {
+    hidden: { opacity: 0, x: 20 },
+    show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 font-bold text-lg text-slate-900 dark:text-white">
@@ -47,7 +62,7 @@ export function TerrainPanel({ trainId }: TerrainPanelProps) {
       {loading && (
         <div className="glass-panel flex items-center gap-3 rounded-2xl p-5 text-sm text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin text-rail-blue" />
-          <span>Fetching bridges, rivers & terrain features along route…</span>
+          <span>Fetching bridges, rivers & terrain features along route...</span>
         </div>
       )}
 
@@ -65,15 +80,20 @@ export function TerrainPanel({ trainId }: TerrainPanelProps) {
       )}
 
       {!loading && features.length > 0 && (
-        <div
+        <motion.div
+          variants={container}
+          initial="hidden"
+          animate="show"
           ref={scrollRef}
-          className="flex gap-3 overflow-x-auto pb-3"
+          className="flex gap-3 overflow-x-auto pb-3 snap-x snap-mandatory"
           style={{ scrollbarWidth: 'thin' }}
         >
           {features.map((f, i) => (
-            <TerrainCard key={`${f.type}-${f.name}-${i}`} feature={f} />
+            <motion.div key={`${f.type}-${f.name}-${i}`} variants={item} className="snap-start">
+              <TerrainCard feature={f} />
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
     </div>
   );

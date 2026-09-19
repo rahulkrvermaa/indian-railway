@@ -68,13 +68,19 @@ export function AnalyticsDashboard({ journey }: AnalyticsDashboardProps) {
     );
   }
 
-  // Delay history for mini bar chart
-  const delayData = analytics.delayHistory.filter((d) => d.delayMinutes >= 0);
+  // Compute real-time delay history directly from the live journey stations
+  const passedStations = journey.stations.filter(s => s.status === 'passed' || s.status === 'current');
+  const delayData = passedStations.slice(Math.max(0, passedStations.length - 12)).map(s => ({
+    stationCode: s.code,
+    stationName: s.name,
+    delayMinutes: s.delayMinutes || 0
+  }));
+  
   const maxDelay = Math.max(...delayData.map((d) => d.delayMinutes), 1);
 
   return (
     <div className="space-y-5">
-      {/* ─── Stat Cards ─── */}
+      {/* ─── Stat Cards ────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { icon: Route, color: 'text-rail-blue', bg: 'bg-rail-blue/10', label: 'Total Distance', value: analytics.totalDistanceKm, suffix: ' km' },
@@ -97,10 +103,10 @@ export function AnalyticsDashboard({ journey }: AnalyticsDashboardProps) {
         ))}
       </div>
 
-      {/* ─── Elevation Profile ─── */}
+      {/* ─── Elevation Profile ─────────────────────────────────────────────────── */}
       <ElevationProfile data={analytics.elevationProfile} highestElevationM={analytics.highestElevationM} />
 
-      {/* ─── Delay Bar Chart ─── */}
+      {/* ─── Delay Bar Chart ───────────────────────────────────────────────────── */}
       <div className="glass-panel rounded-3xl p-6 shadow-glass space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
@@ -112,10 +118,10 @@ export function AnalyticsDashboard({ journey }: AnalyticsDashboardProps) {
 
         {delayData.length > 0 ? (
           <div className="space-y-2">
-            {delayData.slice(0, 12).map((d, i) => {
+            {delayData.map((d, i) => {
               const widthPct = maxDelay > 0 ? Math.round((d.delayMinutes / maxDelay) * 100) : 0;
               const barColor =
-                d.delayMinutes === 0
+                d.delayMinutes <= 0
                   ? 'bg-emerald-500'
                   : d.delayMinutes < 15
                   ? 'bg-amber-400'
@@ -123,13 +129,13 @@ export function AnalyticsDashboard({ journey }: AnalyticsDashboardProps) {
 
               return (
                 <div key={i} className="flex items-center gap-3">
-                  <span className="w-28 truncate text-[11px] text-slate-500 dark:text-slate-400 text-right font-mono flex-shrink-0">
-                    {d.stationCode}
+                  <span className="w-32 truncate text-[11px] text-slate-500 dark:text-slate-400 text-right font-mono flex-shrink-0" title={d.stationName}>
+                    {d.stationName} ({d.stationCode})
                   </span>
                   <div className="flex-1 h-4 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
-                      animate={{ width: `${Math.max(widthPct, d.delayMinutes === 0 ? 4 : 0)}%` }}
+                      animate={{ width: `${Math.max(widthPct, d.delayMinutes <= 0 ? 4 : 0)}%` }}
                       transition={{ duration: 0.5, delay: i * 0.04 }}
                       className={cn('h-full rounded-full', barColor)}
                     />
@@ -142,7 +148,7 @@ export function AnalyticsDashboard({ journey }: AnalyticsDashboardProps) {
             })}
           </div>
         ) : (
-          <p className="text-xs text-slate-400">No delay history available.</p>
+          <p className="text-xs text-slate-400">No delay history available yet. Journey hasn't reached first station.</p>
         )}
       </div>
     </div>
